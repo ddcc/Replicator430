@@ -127,9 +127,9 @@ void main(void)
 void runProgramm(void)
 {
     //! \brief Data pointer
-    word p;
+//    word p;
     //! \brief Buffer, used for memory read with ReadMemQuick()
-    word ReadArray[0x40];
+//    word ReadArray[0x40];
 
 /*------------------------------------------------------------------------------------------------------*/
 /*  1. | Initialize host MSP430 (on Replicator board) & target board                                    */
@@ -137,18 +137,29 @@ void runProgramm(void)
     
     InitController();                     // Initialize the host MSP430F5437
     
+    InitSerial();
+
     ShowStatus(STATUS_ACTIVE, 0);         // Switch both LEDs on to indicate operation.
 
     InitTarget();                         // Initialize target board
+
+    UCA0TXBUF = '0';
 
 /*------------------------------------------------------------------------------------------------------*/
 /*  2. | Connect to the target device                                                                   */
 /*------------------------------------------------------------------------------------------------------*/    
     
-    if (GetDevice() != STATUS_OK)         // Set DeviceId
+    word status;
+    if ((status = GetDevice()) != STATUS_OK)         // Set DeviceId
     {
-        ShowStatus(STATUS_ERROR, 1);      // stop here if invalid JTAG ID or
-    }                                     // time-out. (error: red LED is ON)
+        if (status == STATUS_FUSEBLOWN) {
+            UCA0TXBUF = '2';
+            ShowStatus(STATUS_ACTIVE, 0);
+        } else {
+            UCA0TXBUF = '1';
+            ShowStatus(STATUS_ERROR, 1);      // stop here if invalid JTAG ID or
+        }                                     // time-out. (error: red LED is ON)
+    }
     
 /*------------------------------------------------------------------------------------------------------*/
 /*  3. | Control the target peripherals directly (OPTIONAL)                                             */
@@ -242,7 +253,7 @@ void runProgramm(void)
     }*/
 
     // Perform a mass erase  
-    EraseFLASH(ERASE_MASS, 0xFE00);     // Mass-Erase Flash (all types)
+    //EraseFLASH(ERASE_MASS, 0xFE00);     // Mass-Erase Flash (all types)
     // NOTE: the INFO memory in F2xx device will be not erased
     // if the memory is locked. For more info See EraseFLASH() and
     // UnlockInfoA_430() in JTAGfunc430.c
@@ -252,17 +263,19 @@ void runProgramm(void)
     //    ShowStatus(STATUS_ERROR, 3);
     //}
 
+    /*
     if (!EraseCheck(0xF800, 0x0400))        // Check main memory erasure (Fxx2..9)
     {
         ShowStatus(STATUS_ERROR, 3);
-    }
+    }*/
 
     /* For all 1xx & 4xx & 2xx devices, where ALL Flash has been erased*/
+    /*
     EraseFLASH(ERASE_SGMT, 0xFE00);
     if (!EraseCheck(0xfe00, 0x0100))      // Check part of main memory erasure (Fxx2..9)
     {
         ShowStatus(STATUS_ERROR, 4);
-    }
+    }*/
 
     // For all 2xx devices, where Info A was not erased (Info A keeps calibration data)
     /*
@@ -317,11 +330,11 @@ void runProgramm(void)
     }*/
 
     // Program target code
+    /*
     if (!WriteFLASHallSections(&eprom[0], &eprom_address[0], &eprom_length_of_sections[0], eprom_sections))
     {
         ShowStatus(STATUS_ERROR, 10);
-    }
-
+    }*/
 
 /*------------------------------------------------------------------------------------------------------*/
 /*  6. | Blow the JTAG access protection fuse (OPTIONAL)                                                */
@@ -342,9 +355,10 @@ void runProgramm(void)
     ReleaseDevice(V_RESET);         // Perform Reset, release CPU from JTAG control
                                     // Target board LED should start blinking
     ShowStatus(STATUS_OK, 0);       // OK: green LED is ON
+    UCA0TXBUF = '3';
     
     _EINT();                        // Enable Interrupts
-    P1IE |= 0x040;                  // P1.6 interrupt enabled
+    P4IE |= 0x01;                   // P4.0 interrupt enabled
     
     while(1);                       // Idle, wait for keypress (handled in ISR)
 }
@@ -357,9 +371,9 @@ __interrupt void Port_1(void)
 {   
         ReleaseTarget();                // Release target board from power
         ShowStatus(STATUS_ACTIVE, 0);   // Switch both LEDs on to indicate operation.
-        P1IE &= ~0x040;                 // P1.6 interrupt disabled
+        P4IE &= ~0x01;                  // P4.0 interrupt disabled
         MsDelay(1000);                  // Wait 1s before restarting the Controller and Target
-        P1IFG = 0;
+        P4IFG = 0;
         runProgramm();                  // Restart Controller and Target
 }
 

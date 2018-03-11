@@ -309,22 +309,27 @@ void InitController(void)
 
     //****** set XT1 clock - crystal 12 MHz **********
 
-    P7SEL = 3;      // Port select XT1
-    UCSCTL5 = 0;    // DIVPA, DIVA, DIVS, DIVM -> all direct (DIV=1)
-    UCSCTL6 = XT2OFF+XT1DRIVE_1+XTS;
-                    // XT2 OFF, XT1-ON
-                    // Drive strength - 8-16MHz LFXT1 HF mode
-    // Loop until XT1,XT2 & DCO stabilizes
+    CSCTL0 = CSKEY;
+    CSCTL1 = DCORSEL | DCOFSEL0 | DCOFSEL1; // 24 MHz DCO
+    CSCTL2 = SELA__DCOCLK | SELM__DCOCLK | SELS__DCOCLK; // ACLK = SMCLK = MCLK = DCO
+    CSCTL3 = DIVA__2 | DIVM__2 | DIVS__2; // ACLK = SMCLK = MCLK = DCO / 2
+
+//    P7SEL = 3;      // Port select XT1
+//    UCSCTL5 = 0;    // DIVPA, DIVA, DIVS, DIVM -> all direct (DIV=1)
+//    UCSCTL6 = XT2OFF+XT1DRIVE_1+XTS;
+//                    // XT2 OFF, XT1-ON
+//                    // Drive strength - 8-16MHz LFXT1 HF mode
+//    // Loop until XT1,XT2 & DCO stabilizes
     do{
         // Clear XT2,XT1,DCO fault flags
-        UCSCTL7 &= ~(XT2OFFG + XT1LFOFFG + XT1HFOFFG + DCOFFG);
+        CSCTL5 &= ~(XT2OFFG + XT1OFFG);
         // Clear fault flags
         SFRIFG1 &= ~OFIFG;
     }while( SFRIFG1 & OFIFG );
         // Select ACLK = LFXT1 = 12MHz
         // SMCLK = LFXT1 = 12MHz
         // MCLK = LFXT1 = 12MHz
-    UCSCTL4 = SELA_0+SELS_0+SELM_0;
+//    UCSCTL4 = SELA_0+SELS_0+SELM_0;
 
 #ifdef  MCLK_18MHZ
     // DCO-freq range up to min 39MHz (must be higher then 18MHz*2 = 36 MHz)
@@ -351,6 +356,8 @@ void InitController(void)
 
     //****** clock setup is done **********
 
+    CSCTL0_H = 0;
+
 #if(0)   // can be enabled for test /debug 
     // SMCLK (18 or 12 MHz) freq test on the S1 switch (open) - test time ~ 10ms 
     P1SEL = 0x40;       // SMCLK - to P1.6 (S1 - button)
@@ -361,12 +368,12 @@ void InitController(void)
     // END OF SMCLK freq test on the S1 switch
 #endif
 
-    TRSLDIR = 0;
+//    TRSLDIR = 0;
     // set port to output from MSPF5437 to I/O translators           
-    TRSL_CDIR = TEST_DIR + RST_DIR + TCK_DIR + TMS_DIR + TDOI_DIR + TDI_DIR;
+//    TRSL_CDIR = TEST_DIR + RST_DIR + TCK_DIR + TMS_DIR + TDOI_DIR + TDI_DIR;
     // set all directions from I/O translators to MSP430F5437
     // (all I/O JTAG lines to input)
-    TRSLDIR = TEST_DIR + RST_DIR + TCK_DIR + TMS_DIR + TDOI_DIR + TDI_DIR;  
+//    TRSLDIR = TEST_DIR + RST_DIR + TCK_DIR + TMS_DIR + TDOI_DIR + TDI_DIR;
 
     // set LED ports direction
     LED_DIR |= LED_YELLOW+LED_GREEN+LED_RED;
@@ -374,11 +381,31 @@ void InitController(void)
     LED_OUT |= LED_YELLOW+LED_GREEN+LED_RED;
 
     // set SW ports pull-ups
-    SW_PULLUP |= SW_MODE0+SW_MODE1+SW_1;            // set pull-up/pull-down
-    SW_OUT |= SW_MODE0+SW_MODE1+SW_1;               // select pull-up
+    SW_PULLUP |= SW_MODE0+SW_MODE1;//+SW_1;            // set pull-up/pull-down
+    SW_OUT |= SW_MODE0+SW_MODE1;//+SW_1;               // select pull-up
+    SW_DIR &= ~(SW_MODE0+SW_MODE1);                       // input
 
     SetTargetVcc (0);
     SetVpp( 0 );
+}
+
+void InitSerial()
+{
+    P2OUT = 0;
+    P2SEL0 = 0;
+    P2SEL1 = 3; // P2.0 = UCA0TXD, P2.1 = UCA0RXD
+
+    UCA0CTL1 |= UCSWRST; // reset state
+    UCA0CTL1 |= UCSSEL__SMCLK; // 9600 baud, 8 data bits, 1 stop bit, no parity, BRCLK = SMCLK
+
+    UCA0BR0 = 78; // UCBRx
+    UCA0BR1 = 0;
+    UCA0MCTLW_H = 0; // UCBRSx
+    UCA0MCTLW_L = UCBRF_2 | UCOS16; // UCBRFx
+
+    UCA0STATW = UCLISTEN;
+
+    UCA0CTL1 &= ~UCSWRST;
 }
 
 //----------------------------------------------------------------------------
@@ -386,27 +413,27 @@ void InitController(void)
 //! \param[in] level
 void SetVCoreUp (word level)
 {
-    // Open PMM registers for write access
-    PMMCTL0_H = 0xA5;
-    // Set SVS/SVM high side new level
-    SVSMHCTL = SVSHE + SVSHRVL0 * level + SVMHE + SVSMHRRL0 * level;
-    // Set SVM low side to new level
-    SVSMLCTL = SVSLE + SVMLE + SVSMLRRL0 * level;
-    // Wait till SVM is settled
-    while ((PMMIFG & SVSMLDLYIFG) == 0);
-    // Clear already set flags
-    PMMIFG &= ~(SVMLVLRIFG + SVMLIFG);
-    // Set VCore to new level
-    PMMCTL0_L = PMMCOREV0 * level;
-    // Wait till new level reached
-    if ((PMMIFG & SVMLIFG))
-    {
-        while ((PMMIFG & SVMLVLRIFG) == 0);
-    }
-    // Set SVS/SVM low side to new level
-    SVSMLCTL = SVSLE + SVSLRVL0 * level + SVMLE + SVSMLRRL0 * level;
-    // Lock PMM registers for write access
-    PMMCTL0_H = 0x00;
+//    // Open PMM registers for write access
+//    PMMCTL0_H = 0xA5;
+//    // Set SVS/SVM high side new level
+//    SVSMHCTL = SVSHE + SVSHRVL0 * level + SVMHE + SVSMHRRL0 * level;
+//    // Set SVM low side to new level
+//    SVSMLCTL = SVSLE + SVMLE + SVSMLRRL0 * level;
+//    // Wait till SVM is settled
+//    while ((PMMIFG & SVSMLDLYIFG) == 0);
+//    // Clear already set flags
+//    PMMIFG &= ~(SVMLVLRIFG + SVMLIFG);
+//    // Set VCore to new level
+//    PMMCTL0_L = PMMCOREV0 * level;
+//    // Wait till new level reached
+//    if ((PMMIFG & SVMLIFG))
+//    {
+//        while ((PMMIFG & SVMLVLRIFG) == 0);
+//    }
+//    // Set SVS/SVM low side to new level
+//    SVSMLCTL = SVSLE + SVSLRVL0 * level + SVMLE + SVSMLRRL0 * level;
+//    // Lock PMM registers for write access
+//    PMMCTL0_H = 0x00;
 }
 
 //----------------------------------------------------------------------------
@@ -416,19 +443,19 @@ void SetVCoreUp (word level)
 //! \param[in] level (requested VCC in V * 10)
 void SetTargetVcc (word level)  // level - requested Vcc * 10 
 {
-    if( level == 0 )
-        TVCC_EN_OUT |= TVCC_DIS_BIT; 
-    else
-        TVCC_EN_OUT &= ~TVCC_DIS_BIT; 
-    TVCC_EN_DIR |= TVCC_DIS_BIT; 
-
-    if( level < 21 ) level = 21;
-    if( level > 36 ) level = 36;
-    level = TVCC_MASK & ((level - 21)<<TVCC_SHIFT);
-    TVCC_DIR |= TVCC_MASK;  
-    TVCC_OUT |= TVCC_MASK;      // set min.Vcc ( 0xF0 )
-    TVCC_OUT &= ~level;         // set desired Vcc - clear desired bits
-    MsDelay( 50 );
+//    if( level == 0 )
+//        TVCC_EN_OUT |= TVCC_DIS_BIT;
+//    else
+//        TVCC_EN_OUT &= ~TVCC_DIS_BIT;
+//    TVCC_EN_DIR |= TVCC_DIS_BIT;
+//
+//    if( level < 21 ) level = 21;
+//    if( level > 36 ) level = 36;
+//    level = TVCC_MASK & ((level - 21)<<TVCC_SHIFT);
+//    TVCC_DIR |= TVCC_MASK;
+//    TVCC_OUT |= TVCC_MASK;      // set min.Vcc ( 0xF0 )
+//    TVCC_OUT &= ~level;         // set desired Vcc - clear desired bits
+//    MsDelay( 50 );
 }
 
 //----------------------------------------------------------------------------
@@ -436,7 +463,7 @@ void SetTargetVcc (word level)  // level - requested Vcc * 10
 //! \return word (target VCC in mV)
 word Get_target_Vcc(void)
 {
-    return( Get_Vx( ADC12INCH_14 ));
+    return( Get_Vx( 0 ));
 }
 
 //----------------------------------------------------------------------------
@@ -444,7 +471,7 @@ word Get_target_Vcc(void)
 //! \return word (external VCC in mV)
 word Get_Ext_Vcc(void)
 {
-    return( Get_Vx( ADC12INCH_15 ));
+    return( Get_Vx( 0 ));
 }
 
 //----------------------------------------------------------------------------
@@ -452,41 +479,41 @@ word Get_Ext_Vcc(void)
 //! \return word (voltage in mV)
 word Get_Vx(word index)
 {
-    word y,x; 
-
-    // ADC12  initialization
-    UCSCTL8 |= MODOSCREQEN;     // Enable osc for ADC12
-                                // (in the Unifield Clock System)
-    ADC12CTL0 |= ADC12SHT0_8 + ADC12REFON + ADC12ON; // Internal reference =1.5V
-    ADC12CTL1 = ADC12SHP;
-    ADC12MCTL0 = ADC12SREF_1 + index;   // Input A14 or A15
-    
-    // Delay for needed ref start-up.
-    MsDelay( 5 );
-
-    ADC12CTL0 |= ADC12ENC;  // Enable conversions
-    ADC12CTL0 |= ADC12SC;   // Start conversion - sw trigger
-    ADC12IFG &= ~BIT0;
-    do{ 
-    }while( (ADC12IFG & BIT0) == 0 );
-    ADC12CTL0 &= ~ADC12ENC; // Disable ADC12
-
-    // Vcc hardware divider - Vcc/ADCin = 3/1;
-    // Ref Vcc = 1.5
-    // x = x * 3 * 1.5 = x * 4.5 = x * 9 /2
-
-    x = (ADC12MEM0 * 9)>>1;
-
-    // result Vcc =  x * 1000/4096   in mV
-    // y = x * 1000/(4000+96) ~= x * 0.25 * 4000/(4000+96) 
-    //   = x * 0.25 * 1/(1+96/4000) != x * 0.25 * (1 - 96/4000)
-    // y = x * 0.25 * (1 - 96/4000) ~= x/4 - x * 24/4000
-    //   = x/4 - x/167 ~= x/4 - 3*x/512 = x/4 - x/256 - x/512
-    
-    y = x>>2;           // y = x/4      
-    x = x>>8;           // x = x/256
-    y -= x + (x>>1);    // y = x/4 - x/256 - x/512;
-    return(y);
+//    word y,x;
+//
+//    // ADC12  initialization
+//    UCSCTL8 |= MODOSCREQEN;     // Enable osc for ADC12
+//                                // (in the Unifield Clock System)
+//    ADC12CTL0 |= ADC12SHT0_8 + ADC12REFON + ADC12ON; // Internal reference =1.5V
+//    ADC12CTL1 = ADC12SHP;
+//    ADC12MCTL0 = ADC12SREF_1 + index;   // Input A14 or A15
+//
+//    // Delay for needed ref start-up.
+//    MsDelay( 5 );
+//
+//    ADC12CTL0 |= ADC12ENC;  // Enable conversions
+//    ADC12CTL0 |= ADC12SC;   // Start conversion - sw trigger
+//    ADC12IFG &= ~BIT0;
+//    do{
+//    }while( (ADC12IFG & BIT0) == 0 );
+//    ADC12CTL0 &= ~ADC12ENC; // Disable ADC12
+//
+//    // Vcc hardware divider - Vcc/ADCin = 3/1;
+//    // Ref Vcc = 1.5
+//    // x = x * 3 * 1.5 = x * 4.5 = x * 9 /2
+//
+//    x = (ADC12MEM0 * 9)>>1;
+//
+//    // result Vcc =  x * 1000/4096   in mV
+//    // y = x * 1000/(4000+96) ~= x * 0.25 * 4000/(4000+96)
+//    //   = x * 0.25 * 1/(1+96/4000) != x * 0.25 * (1 - 96/4000)
+//    // y = x * 0.25 * (1 - 96/4000) ~= x/4 - x * 24/4000
+//    //   = x/4 - x/167 ~= x/4 - 3*x/512 = x/4 - x/256 - x/512
+//
+//    y = x>>2;           // y = x/4
+//    x = x>>8;           // x = x/256
+//    y -= x + (x>>1);    // y = x/4 - x/256 - x/512;
+    return 0;
 }
 //----------------------------------------------------------------------------
 //! \brief Set the direction for the TDI pin
@@ -494,10 +521,10 @@ word Get_Vx(word index)
 void TDI_dir(word dir)
 {
     JTAGDIR |= TDI;     // Always set to output in the F5437 
-    if( dir == 0 )      // Direction IN - from target to REP430F
-        TRSLDIR |= TDI_DIR;  
-    else
-        TRSLDIR &= ~TDI_DIR;  
+//    if( dir == 0 )      // Direction IN - from target to REP430F
+//        TRSLDIR |= TDI_DIR;
+//    else
+//        TRSLDIR &= ~TDI_DIR;
 }
 //----------------------------------------------------------------------------
 //! \brief Set the direction for the TDO pin
@@ -505,10 +532,10 @@ void TDI_dir(word dir)
 void TDOI_dir(word dir)
 {
     JTAGDIR &= ~TDO;    // Always set to input in the F5437  
-    if( dir == 0 )      // Direction IN - from target to REP430
-        TRSLDIR |= TDOI_DIR;  
-    else
-        TRSLDIR &= ~TDOI_DIR;  
+//    if( dir == 0 )      // Direction IN - from target to REP430
+//        TRSLDIR |= TDOI_DIR;
+//    else
+//        TRSLDIR &= ~TDOI_DIR;
 }
 //----------------------------------------------------------------------------
 //! \brief Set the direction for the TEST pin
@@ -518,11 +545,11 @@ void TEST_dir(word dir)
     if( dir == 0 )             // Direction IN - from target to REP430
     {
         JTAGDIR &= ~TEST;      // Switch MSP port to input first - to avoid two outputs on the line
-        TRSLDIR |= TEST_DIR;  
+//        TRSLDIR |= TEST_DIR;
     }
     else
     {
-        TRSLDIR &= ~TEST_DIR;  // Switch translator to output first - to avoid two outputs on the line
+//        TRSLDIR &= ~TEST_DIR;  // Switch translator to output first - to avoid two outputs on the line
         JTAGDIR |= TEST;       // Switch MSP port to output
     }
 }
@@ -534,11 +561,11 @@ void TMS_dir(word dir)
     if( dir == 0 )             // Direction IN - from target to REP430
     {
         JTAGDIR &= ~TMS;       // Switch MSP port to input first - to avoid two outputs on the line
-        TRSLDIR |= TMS_DIR;  
+//        TRSLDIR |= TMS_DIR;
     }
     else
     {
-        TRSLDIR &= ~TMS_DIR;  // Switch translator to output first - to avoid two outputs on the line
+//        TRSLDIR &= ~TMS_DIR;  // Switch translator to output first - to avoid two outputs on the line
         JTAGDIR |= TMS;       // Switch MSP port to output
     }
 }
@@ -550,11 +577,11 @@ void RST_dir(word dir)
     if( dir == 0 )            // Direction IN - from target to REP430
     {
         JTAGDIR &= ~RST;      // Switch MSP port to input first - to avoid two outputs on the line
-        TRSLDIR |= RST_DIR;  
+//        TRSLDIR |= RST_DIR;
     }
     else
     {
-        TRSLDIR &= ~RST_DIR;  // Switch translator to output first - to avoid two outputs on the line
+//        TRSLDIR &= ~RST_DIR;  // Switch translator to output first - to avoid two outputs on the line
         JTAGDIR |= RST;       // Switch MSP port to output
     }
 }
@@ -564,10 +591,10 @@ void RST_dir(word dir)
 void TCK_dir(word dir)
 {
     JTAGDIR |= TCK;     // Always set to output in the F5437 
-    if( dir == 0 )      // Direction IN - from target to REP430
-        TRSLDIR |= TCK_DIR;  
-    else
-        TRSLDIR &= ~TCK_DIR;  
+//    if( dir == 0 )      // Direction IN - from target to REP430
+//        TRSLDIR |= TCK_DIR;
+//    else
+//        TRSLDIR &= ~TCK_DIR;
 }
 //----------------------------------------------------------------------------
 //! \brief function to set the fuse blow voltage Vpp
@@ -580,10 +607,10 @@ void SetVpp(word source)
     if( source & VPPONTEST )    TEST_dir( 0 );
     if( source & VPPONTDI ) TDI_dir( 0 );
 
-    VPPOUT &= ~( VPPONTDI | VPPONTEST );
+//    VPPOUT &= ~( VPPONTDI | VPPONTEST );
     source &= VPPONTDI | VPPONTEST;
-    VPPOUT |= source; 
-    VPPDIR |= VPPONTDI | VPPONTEST;
+//    VPPOUT |= source;
+//    VPPDIR |= VPPONTDI | VPPONTEST;
     MsDelay( 2 );
     if(( source & VPPONTEST ) == 0 ) TEST_dir( 1 );
     if(( source & VPPONTDI ) == 0 )  TDI_dir( 1 );
@@ -593,17 +620,17 @@ void SetVpp(word source)
 //! \brief Enable fuse blow voltage Vpp
 void Enable_Vpp(void)
 {
-    SW_DIR |= SW_VPPEN;
-    SW_OUT &= ~SW_VPPEN; 
-    MsDelay( 20 );
+//    SW_DIR |= SW_VPPEN;
+//    SW_OUT &= ~SW_VPPEN;
+//    MsDelay( 20 );
 }
 
 //----------------------------------------------------------------------------
 //! \brief Disable fuse blow voltage Vpp
 void Disable_Vpp(void)
 {
-    SW_OUT |= SW_VPPEN; 
-    SW_DIR &= ~SW_VPPEN;
+//    SW_OUT |= SW_VPPEN;
+//    SW_DIR &= ~SW_VPPEN;
 }
 //----------------------------------------------------------------------------
 //! \brief Set JTAG pins to output direction - from REP430F to target
@@ -651,7 +678,8 @@ void DrvSignals(void)
 {
     SetVpp( 0 );  
     IO_3state();
-    JTAGSEL  = 0x00;            // Pins all I/Os
+    JTAGSEL0  = 0x00;            // Pins all I/Os
+    JTAGSEL1  = 0x00;            // Pins all I/Os
 #if ( INTERFACE == SPYBIWIRE_IF )
     JTAGOUT  |= TDI;
     JTAGOUT  &= ~TCK;
@@ -860,7 +888,7 @@ void TCLKstrobes(word Amount)
 //! variable during debugging phase)
 void ShowStatus(word status, word index)
 {
-    All_LEDs_off();                     
+    All_LEDs_off();
     switch (status)
     {
         case STATUS_ERROR:
@@ -869,10 +897,10 @@ void ShowStatus(word status, word index)
             while(index);               // Stop program, index must be > 0
         case STATUS_ACTIVE:;            // Switch yellow LEDs on
             LED_yellow_on();
-             break;
+            break;
         case STATUS_OK:                 // Switch green LED on
             LED_green_on();
-             break;
+            break;
         case STATUS_IDLE:;              // Keep LEDs switched off
     }
 }                                       // return if active, idle, ok

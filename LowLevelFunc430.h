@@ -66,7 +66,7 @@
 /****************************************************************************/
 
 #include "Config430.h"        // High-level user input
-#include <msp430x54x.h>
+#include <msp430fr5739.h>
 
 /****************************************************************************/
 /* DEFINES & CONSTANTS                                                      */
@@ -115,69 +115,44 @@
 /* based devices.                                                           */
 /****************************************************************************/
 
-// I/O Level translators (SN74LVC1T45) direction setup
-
-#define TRSLDIR         P2OUT
-
-#define TRSL_CDIR       P2DIR
-
-//! \brief BSL RX Translator direction     0 - output from REP430F,  1 - input to REP430F
-//! \details Not used in this project
-#define BRX_DIR     0x01
-//! \brief BSL TX Translator direction     0 - output from REP430F,  1 - input to REP430F
-//! \details Not used in this project
-#define BTX_DIR     0x02 
-//! \brief TEST Translator direction       0 - output from REP430F,  1 - input to REP430F 
-#define TEST_DIR        0x04
-//! \brief RESET Translator direction      0 - output from REP430F,  1 - input to REP430F 
-#define RST_DIR         0x08
-//! \brief TCK Translator direction        0 - output from REP430F,  1 - input to REP430F 
-#define TCK_DIR         0x10
-//! \brief TMS Translator direction        0 - output from REP430F,  1 - input to REP430F 
-#define TMS_DIR         0x20
-//! \brief TDO/TDI Translator direction    0 - output from REP430F,  1 - input to REP430F 
-#define TDOI_DIR        0x40
-//! \brief TDI Translator direction        0 - output from REP430F,  1 - input to REP430F 
-#define TDI_DIR         0x80
-
-#define SW_OUT          P1OUT       
-#define SW_IN           P1IN
-#define SW_DIR          P1DIR
-#define SW_PULLUP       P1REN
+#define SW_OUT          P4OUT
+#define SW_IN           P4IN
+#define SW_DIR          P4DIR
+#define SW_PULLUP       P4REN
 //! \brief LED output register
-#define LED_OUT         P1OUT  
+#define LED_OUT         P3OUT
 //! \brief LED direction register     
-#define LED_DIR         P1DIR
+#define LED_DIR         P3DIR
 
-//! \brief Mode-0 switch
+//! \brief Mode-0 switch, P4.0
 #define SW_MODE0        0x01
-//! \brief Mode-1 switch
+//! \brief Mode-1 switch, P4.1
 #define SW_MODE1        0x02
 //! \brief Switch-Vpp Enable - test and set/clr
-#define SW_VPPEN        0x04
-//! \brief YELLOW LED
-#define LED_YELLOW      0x08
-//! \brief GREEN LED
-#define LED_GREEN       0x10
-//! \brief RED LED
-#define LED_RED         0x20
+//#define SW_VPPEN        0x04
+//! \brief YELLOW LED   P3.6, LED6
+#define LED_YELLOW      0x40
+//! \brief GREEN LED    P3.5, LED5
+#define LED_GREEN       0x20
+//! \brief RED LED      P3.4, LED4
+#define LED_RED         0x10
 //! \brief SW-1 TEST
-#define SW_1            0x40
+//#define SW_1            0x40
 
 //#define spareP17        0x80
 
 //! \brief VCC output register
-#define TVCC_OUT        P6OUT
+//#define TVCC_OUT        P6OUT
 //! \brief VCC direction register
-#define TVCC_DIR        P6DIR
+//#define TVCC_DIR        P6DIR
 //! \brief Minimum VCC value
-#define TVCC_MASK       0xF0
+//#define TVCC_MASK       0xF0
 //! \brief Value to shift up voltage level
-#define TVCC_SHIFT      4
+//#define TVCC_SHIFT      4
 
-#define TVCC_EN_DIR     P5DIR
-#define TVCC_EN_OUT     P5OUT
-#define TVCC_DIS_BIT    1
+//#define TVCC_EN_DIR     P5DIR
+//#define TVCC_EN_OUT     P5OUT
+//#define TVCC_DIS_BIT    1
 
 //! \brief Switch on yellow LED
 #define LED_yellow_on()     ( LED_OUT |= LED_YELLOW )
@@ -194,28 +169,29 @@
 //! \brief Switch off all LEDs
 #define All_LEDs_off()      ( LED_OUT &= ~(LED_GREEN | LED_RED | LED_YELLOW ))
 
-// JTAG ports are P5.x
+// JTAG ports are P1.x
 //! \brief JTAG output register
-#define JTAGOUT         P5OUT
+#define JTAGOUT         P1OUT
 //! \brief JTAG input register
-#define JTAGIN          P5IN
+#define JTAGIN          P1IN
 //! \brief JTAG direction register
-#define JTAGDIR         P5DIR
+#define JTAGDIR         P1DIR
 //! \brief JTAG select register
-#define JTAGSEL         P5SEL
-//! \brief P5.5 JTAG TMS input pin
-#define TMS             0x20
-//! \brief P5.7 JTAG TDI input pin
-#define TDI             0x80
-//! \brief P5.6 JTAG TDO output pin
+#define JTAGSEL0         P1SEL0
+#define JTAGSEL1         P1SEL1
+//! \brief P1.3 JTAG TMS input pin
+#define TMS             0x08
+//! \brief P1.5 JTAG TDI input pin
+#define TDI             0x20
+//! \brief P1.6 JTAG TDO output pin
 #define TDO             0x40
-//! \brief P5.4 JTAG TCK input pin
-#define TCK             0x10
-//! \brief P5.2 JTAG Test input pin
-#define TEST            0x04
-//! \brief P5.3 Hardware RESET input pin
-#define RST             0x08
-//! \brief P5.7 TDI (former XOUT) receives TCLK
+//! \brief P1.2 JTAG TCK input pin
+#define TCK             0x04
+//! \brief P1.0 JTAG Test input pin
+#define TEST            0x01
+//! \brief P1.1 Hardware RESET input pin
+#define RST             0x02
+//! \brief P1.5 TDI (former XOUT) receives TCLK
 #define TCLK            TDI
 
 //! \brief BSL output register
@@ -239,11 +215,11 @@
 
 // VPP ports are P8.x
 //! \brief Fuse blow voltage (Vpp) output register
-#define VPPOUT          P8OUT
+//#define VPPOUT          P8OUT
 //! \brief Fuse blow voltage (Vpp) direction register   
-#define VPPDIR          P8DIR
+//#define VPPDIR          P8DIR
 //! \brief Fuse blow voltage (Vpp) select register
-#define VPPSEL          P8SEL
+//#define VPPSEL          P8SEL
 
 //! \brief P8.2 Fuse blow voltage switched to TEST
 #define VPPONTEST       0x04
@@ -379,6 +355,7 @@ void    IR_Ex_Blow_SBW_Shift(void);
 void    MsDelay(word milliseconds);      // millisecond delay loop, uses Timer_A
 void    usDelay(word microeconds);       // microsecond delay loop, uses nops
 void    InitController(void);
+void    InitSerial(void);
 void    InitTarget(void);
 void    ReleaseTarget(void);
 word    Shift(word Format, word Data);   // used for IR- as well as DR-shift

@@ -61,8 +61,8 @@
 //! with SBW, F5xx, F6xx)
 //! </UL>
 //! Select ONLY ONE interface, comment-out remaining options 
-//#define INTERFACE  JTAG_IF
-#define INTERFACE  SPYBIWIRE_IF
+#define INTERFACE  JTAG_IF
+//#define INTERFACE  SPYBIWIRE_IF
 //#define INTERFACE  SPYBIWIREJTAG_IF
 
 //! \brief Set the target's Vcc level supplied by REP430F 
@@ -78,7 +78,7 @@
 //! REP430F is low (below 2.5V).
 //! That can apply when the REP430F is supplied from the target device, not 
 //! from the external power supply.
-#define MCLK_18MHZ
+//#define MCLK_18MHZ
 //! \brief Buffer size in words for read and write operations
 #define WordBufferSize  50
 //! \brief Maximum number of tries for the determination of the core
